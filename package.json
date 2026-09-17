@@ -1,0 +1,100 @@
+{
+  "name": "llm-chat",
+  "displayName": "LLM Chat",
+  "description": "Chat con cualquier endpoint compatible con OpenAI, con sesiones guardadas en Postgres y consumo de tokens por sesión.",
+  "version": "0.0.1",
+  "publisher": "sebas18g",
+  "private": true,
+  "icon": "media/icon.png",
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "llmChat",
+          "title": "LLM Chat",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "llmChat": [
+        {
+          "id": "llmChat.chatView",
+          "name": "Chat",
+          "type": "webview",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "llmChat.testConnection",
+        "title": "Probar conexión",
+        "category": "LLM Chat"
+      },
+      {
+        "command": "llmChat.newSession",
+        "title": "Nueva sesión",
+        "category": "LLM Chat"
+      }
+    ],
+    "configuration": {
+      "title": "LLM Chat",
+      "properties": {
+        "llmChat.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "URL base del endpoint compatible con OpenAI (sin /chat/completions)."
+        },
+        "llmChat.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "Modelo que se envía en cada petición."
+        },
+        "llmChat.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "description": "Máximo de tokens de la respuesta (max_tokens)."
+        },
+        "llmChat.temperature": {
+          "type": "number",
+          "default": 0.7,
+          "description": "Temperatura de muestreo."
+        },
+        "llmChat.systemPrompt": {
+          "type": "string",
+          "default": "",
+          "description": "Mensaje de sistema opcional que se antepone a cada conversación."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "npm run check-types && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "check-types": "tsc --noEmit",
+    "vscode:prepublish": "npm run check-types && node esbuild.js --production",
+    "package": "vsce package --allow-missing-repository --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.23.1",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "pg": "^8.23.0"
+  }
+}

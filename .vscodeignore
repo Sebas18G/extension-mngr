@@ -1,0 +1,14 @@
+.gitignore
+.vscode/**
+*.vsix
+.agents/**
+.claude/**
+specs/**
+src/**
+esbuild.js
+tsconfig.json
+skills-lock.json
+**/*.map
+**/*.ts
+.env
+.env.*

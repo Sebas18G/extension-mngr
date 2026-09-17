@@ -10,3 +10,5 @@ tsconfig.json
 skills-lock.json
 **/*.map
 **/*.ts
+.env
+.env.*

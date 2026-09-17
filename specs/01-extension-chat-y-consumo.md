@@ -24,13 +24,13 @@ Es la primera spec del repositorio: no hay código previo, ni convenciones, ni `
 - Extensión de VS Code en TypeScript, empaquetable como `.vsix` e instalable localmente.
 - Panel propio en la Activity Bar con icono dedicado, que contiene tres vistas: lista de sesiones, chat activo y consumo.
 - Chat contra un endpoint compatible con OpenAI (`POST {baseUrl}/chat/completions`) con respuesta en **streaming** token a token.
-- API key y cadena de conexión a Postgres guardadas en `SecretStorage` de VS Code.
+- API key y cadena de conexión a Postgres leídas del archivo `.env` en la raíz del workspace abierto (`LLM_API_KEY`, `POSTGRES_URL`).
 - Schema propio `vscode_chat` en Postgres, creado por la propia extensión al activarse, de forma idempotente.
 - Script DDL versionado en el repositorio (`db/001_init.sql`), que es la misma sentencia que ejecuta la extensión.
 - Persistencia de sesiones y mensajes: crear sesión, listar sesiones, abrir y leer una sesión pasada.
 - Registro de tokens por respuesta (`prompt_tokens`, `completion_tokens`, `total_tokens`) y agregado por sesión.
 - Estado de error visible y explícito cuando Postgres no responde: el chat se bloquea en lugar de perder datos en silencio.
-- Comandos en la paleta: configurar API key, configurar conexión a Postgres, probar conexión, nueva sesión.
+- Comandos en la paleta: probar conexión, nueva sesión.
 
 **Fuera de alcance (para specs futuras):**
 
@@ -108,12 +108,14 @@ Ajustes no sensibles, bajo el prefijo `llmChat`:
 }
 ```
 
-### 3.3 Secretos en `SecretStorage`
+### 3.3 Secretos en `.env` del workspace
 
-Nunca en `settings.json`, nunca en el repositorio. Dos claves:
+Nunca en `settings.json`, nunca commiteados. Se leen del archivo `.env` en la raíz de la primera carpeta del workspace abierto, en cada uso (un cambio en `.env` aplica sin reiniciar). Dos variables:
 
-- `llmChat.apiKey` → se envía como `Authorization: Bearer <key>`.
-- `llmChat.postgresUrl` → cadena completa, p. ej. `postgresql://user:pass@localhost:5432/mydb`.
+- `LLM_API_KEY` → se envía como `Authorization: Bearer <key>`.
+- `POSTGRES_URL` → cadena completa, p. ej. `postgresql://user:pass@localhost:5432/mydb`.
+
+El repositorio incluye `.env.example` con ambas variables vacías; `.env` está en `.gitignore` y en `.vscodeignore`. Si no hay workspace abierto, no existe `.env` o falta una variable, la extensión lo informa con un error explícito que nombra el archivo y la variable.
 
 ### 3.4 Protocolo webview ↔ extensión
 
@@ -149,9 +151,9 @@ Cada paso deja el repositorio en estado compilable y ejecutable con F5 (Extensio
 
 2. **Panel lateral vacío.** Declarar en `package.json` el `viewsContainers.activitybar` con id `llmChat` y la vista `llmChat.chatView` de tipo `webview`. Implementar `src/panel/ChatViewProvider.ts` con un `resolveWebviewView` que sirve HTML estático. Crear `media/main.css` y `media/main.js`. Prueba manual: aparece el icono en la barra lateral y abre un panel con texto placeholder.
 
-3. **Gestión de secretos.** Añadir `src/config/secrets.ts` con `getApiKey`, `setApiKey`, `getPostgresUrl`, `setPostgresUrl` sobre `context.secrets`. Registrar los comandos `llmChat.setApiKey` y `llmChat.setPostgresUrl`, que piden el valor con `showInputBox({ password: true })`. Prueba manual: guardar una key, recargar la ventana, comprobar que sigue disponible.
+3. **Gestión de secretos.** Añadir `src/config/env.ts` con `getApiKey` y `getPostgresUrl`, que leen `LLM_API_KEY` y `POSTGRES_URL` del `.env` en la raíz del workspace abierto. Añadir `.env.example` y excluir `.env` en `.gitignore` y `.vscodeignore`. Prueba manual: rellenar `.env`, abrir la carpeta en VS Code y comprobar que la extensión usa esos valores. *(Revisado tras el paso 13: sustituye a `SecretStorage` y a los comandos `setApiKey`/`setPostgresUrl`.)*
 
-4. **Conexión a Postgres.** Añadir la dependencia `pg`. Crear `src/db/pool.ts` que construye un `Pool` a partir de la cadena de `SecretStorage` y expone `getPool()` y `healthCheck()`. Reescribir `llmChat.testConnection` para ejecutar `SELECT 1` y reportar éxito o el error real. Prueba manual: con Postgres arriba, el comando dice OK; con Postgres apagado, muestra el error de conexión.
+4. **Conexión a Postgres.** Añadir la dependencia `pg`. Crear `src/db/pool.ts` que construye un `Pool` a partir de `POSTGRES_URL` del `.env` y expone `getPool()` y `healthCheck()`. Reescribir `llmChat.testConnection` para ejecutar `SELECT 1` y reportar éxito o el error real. Prueba manual: con Postgres arriba, el comando dice OK; con Postgres apagado, muestra el error de conexión.
 
 5. **Creación del schema.** Escribir `db/001_init.sql` con el DDL de la sección 3.1. Crear `src/db/schema.ts` que lee ese archivo desde el bundle y lo ejecuta en una transacción durante la activación, después de que haya cadena de conexión. Prueba manual: activar la extensión y verificar con `\dt vscode_chat.*` en psql que existen las tres tablas; ejecutar dos veces y comprobar que no falla.
 
@@ -178,8 +180,9 @@ Cada paso deja el repositorio en estado compilable y ejecutable con F5 (Extensio
 - [ ] `npm run package` genera un `.vsix` sin errores.
 - [ ] El `.vsix` se instala con `code --install-extension` y la extensión aparece en la lista de instaladas.
 - [ ] Tras instalar, aparece un icono propio en la Activity Bar que abre el panel.
-- [ ] El comando `llmChat.setApiKey` guarda la key y esta sobrevive a un reinicio de VS Code.
-- [ ] La API key no aparece en `settings.json` ni en ningún archivo del workspace.
+- [ ] Con un `.env` válido en la raíz del workspace, la extensión conecta a Postgres y al endpoint sin ejecutar ningún comando de configuración.
+- [ ] La API key no aparece en `settings.json`; `.env` está en `.gitignore` y no se incluye en el `.vsix`.
+- [ ] Sin `.env` o sin una de sus variables, el panel muestra un error que nombra el archivo y la variable que falta.
 - [ ] El comando `llmChat.testConnection` devuelve OK con Postgres arriba y un mensaje de error con Postgres apagado.
 - [ ] Tras la primera activación con conexión válida, existen en Postgres `vscode_chat.sessions`, `vscode_chat.messages` y `vscode_chat.message_usage`.
 - [ ] Ejecutar la creación del schema dos veces seguidas no produce error.
@@ -201,9 +204,9 @@ Cada paso deja el repositorio en estado compilable y ejecutable con F5 (Extensio
 
 - **Sí:** endpoint genérico compatible con OpenAI (`/chat/completions`). Un solo formato de petición, streaming y `usage` sirve para OpenAI, OpenRouter, Ollama y gateways propios.
 - **No:** SDK de Anthropic o multi-proveedor con dos SDKs. Duplicaba el trabajo de streaming y de conteo de tokens desde el primer día.
-- **Sí:** `SecretStorage` de VS Code para la API key y para la cadena de Postgres. Es cifrado del sistema operativo y no se sincroniza con Settings Sync.
+- **Sí (revisado tras el paso 13):** `.env` en la raíz del workspace para la API key y la cadena de Postgres. La extensión debe funcionar sin pasos manuales de configuración dentro de VS Code, y las credenciales quedan junto al proyecto, fuera de git.
+- **No (revisado):** `SecretStorage` con comandos `setApiKey`/`setPostgresUrl`. Obligaba a configurar a mano en cada instalación y no permite dejar la configuración lista por defecto.
 - **No:** API key en `settings.json`. Queda en texto plano y viaja con Settings Sync.
-- **No:** leer solo `ANTHROPIC_API_KEY` del entorno. Obliga a configurar fuera de VS Code y no encaja con un endpoint genérico.
 - **Sí:** Postgres local con schema propio `vscode_chat`. El usuario ya tiene la instancia corriendo y quiere los datos ahí.
 - **No:** archivos JSON en `globalStorageUri`, SQLite o `globalState`. Descartados frente a la instancia de Postgres que ya existe.
 - **Sí:** la extensión crea el schema al arrancar con `CREATE ... IF NOT EXISTS` dentro de una transacción. Es idempotente y no exige pasos manuales al usuario.
@@ -227,7 +230,8 @@ Cada paso deja el repositorio en estado compilable y ejecutable con F5 (Extensio
 | --- | --- |
 | El endpoint compatible no devuelve `usage` al hacer streaming (Ollama y algunos gateways lo omiten) | Las columnas de tokens son nullable y la UI muestra `—`. El chat sigue funcionando; solo se pierde la métrica de ese turno. |
 | Postgres caído o cadena de conexión inválida | `healthCheck()` en la activación y estado degradado visible con input bloqueado y botón de reintentar. Nunca se pierde un mensaje en silencio. |
-| La cadena de conexión contiene la contraseña en texto plano | Vive solo en `SecretStorage`, nunca en `settings.json`. Los mensajes de error nunca imprimen la cadena completa. |
+| La cadena de conexión y la API key están en texto plano en `.env` | `.env` está en `.gitignore` y `.vscodeignore`; el repo solo versiona `.env.example`. Nunca en `settings.json`. Los mensajes de error nunca imprimen la cadena completa. |
+| Sin workspace abierto no hay `.env` que leer | Error explícito en el panel indicando que hay que abrir la carpeta que contiene `.env`. |
 | Las conversaciones crecen y el prompt supera la ventana de contexto | En esta spec se envía el historial completo y se propaga el error del endpoint tal cual. El truncado o resumen va en otra spec. |
 | Colisión de nombres si el usuario ya tiene un schema `vscode_chat` | `CREATE SCHEMA IF NOT EXISTS` no borra nada, y todas las tablas usan `IF NOT EXISTS`. La extensión nunca hace `DROP`. |
 | El driver `pg` se rompe al empaquetar con esbuild | Se marca `pg` como externo en el bundle y se incluye en `dependencies`, no en `devDependencies`. El paso 13 valida esto instalando el `.vsix` real. |

@@ -42,16 +42,6 @@
         "category": "LLM Chat"
       },
       {
-        "command": "llmChat.setApiKey",
-        "title": "Configurar API key",
-        "category": "LLM Chat"
-      },
-      {
-        "command": "llmChat.setPostgresUrl",
-        "title": "Configurar conexión a Postgres",
-        "category": "LLM Chat"
-      },
-      {
         "command": "llmChat.newSession",
         "title": "Nueva sesión",
         "category": "LLM Chat"
@@ -104,6 +94,7 @@
     "typescript": "^5.5.0"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "pg": "^8.23.0"
   }
 }

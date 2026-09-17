@@ -1,6 +1,5 @@
 import { Pool } from 'pg';
-import * as vscode from 'vscode';
-import { getPostgresUrl } from '../config/secrets';
+import { getPostgresUrl } from '../config/env';
 
 export interface HealthStatus {
   ok: boolean;
@@ -11,14 +10,11 @@ let pool: Pool | undefined;
 let poolUrl: string | undefined;
 
 /**
- * Devuelve un Pool construido con la cadena de SecretStorage.
+ * Devuelve un Pool construido con POSTGRES_URL del `.env` del workspace.
  * Si la cadena cambió desde la última llamada, cierra el pool anterior y crea uno nuevo.
  */
-export async function getPool(secrets: vscode.SecretStorage): Promise<Pool> {
-  const url = await getPostgresUrl(secrets);
-  if (!url) {
-    throw new Error('No hay conexión a Postgres configurada. Ejecuta "LLM Chat: Configurar conexión a Postgres".');
-  }
+export async function getPool(): Promise<Pool> {
+  const url = await getPostgresUrl();
 
   if (pool && poolUrl === url) {
     return pool;
@@ -32,9 +28,9 @@ export async function getPool(secrets: vscode.SecretStorage): Promise<Pool> {
   return pool;
 }
 
-export async function healthCheck(secrets: vscode.SecretStorage): Promise<HealthStatus> {
+export async function healthCheck(): Promise<HealthStatus> {
   try {
-    const p = await getPool(secrets);
+    const p = await getPool();
     await p.query('SELECT 1');
     return { ok: true };
   } catch (err) {
@@ -54,5 +50,5 @@ export async function closePool(): Promise<void> {
 /** Mensaje de error legible que nunca incluye la cadena de conexión. */
 export function sanitizeError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
-  return poolUrl ? message.split(poolUrl).join('<postgresUrl>') : message;
+  return poolUrl ? message.split(poolUrl).join('<POSTGRES_URL>') : message;
 }

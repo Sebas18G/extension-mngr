@@ -14,22 +14,25 @@ Extensión de VS Code con un panel lateral de chat contra cualquier endpoint **c
 - VS Code 1.90 o superior.
 - Una instancia de PostgreSQL accesible. La extensión crea el schema `vscode_chat` y sus tablas al activarse (`CREATE ... IF NOT EXISTS`); nunca escribe en `public` ni borra nada. El DDL está en `db/001_init.sql`.
 - Una API key para el endpoint (si el endpoint la requiere).
+- Una carpeta abierta en VS Code con un archivo `.env` en su raíz.
 
 ## Puesta en marcha
 
-1. Abre la paleta de comandos y ejecuta **LLM Chat: Configurar conexión a Postgres**, con una cadena del tipo `postgresql://user:pass@localhost:5432/mydb`.
-2. Ejecuta **LLM Chat: Configurar API key**.
-3. Opcional: **LLM Chat: Probar conexión** para comprobar Postgres.
-4. Abre el icono **LLM Chat** de la Activity Bar y escribe.
+1. En la raíz de la carpeta que abres en VS Code, crea un archivo `.env` (puedes copiar `.env.example`):
 
-La API key y la cadena de conexión se guardan en el `SecretStorage` de VS Code (cifrado del sistema operativo). Nunca se escriben en `settings.json`.
+   ```dotenv
+   POSTGRES_URL=postgresql://postgres:tu_contraseña@localhost:5432/postgres
+   LLM_API_KEY=sk-...
+   ```
+
+2. Abre el icono **LLM Chat** de la Activity Bar y escribe. No hay que ejecutar ningún comando de configuración.
+
+La extensión lee `.env` en cada uso: si lo editas, se reconecta sola. Añade `.env` a tu `.gitignore`; nunca pongas credenciales en `settings.json`.
 
 ## Comandos
 
 | Comando | Descripción |
 | --- | --- |
-| `LLM Chat: Configurar API key` | Guarda la API key en `SecretStorage`. |
-| `LLM Chat: Configurar conexión a Postgres` | Guarda la cadena de conexión y crea el schema. |
 | `LLM Chat: Probar conexión` | Ejecuta `SELECT 1` contra Postgres y muestra el resultado. |
 | `LLM Chat: Nueva sesión` | Abre el panel con una sesión vacía. |
 

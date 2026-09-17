@@ -154,7 +154,7 @@
   function setDbStatus(ok, message) {
     dbOk = ok;
     dbStatusEl.hidden = ok;
-    dbStatusMessageEl.textContent = ok ? '' : `Postgres no responde: ${message ?? 'error desconocido'}`;
+    dbStatusMessageEl.textContent = ok ? '' : `Sin conexión a Postgres: ${message ?? 'error desconocido'}`;
     retryBtn.disabled = false;
 
     if (!ok && streaming) {

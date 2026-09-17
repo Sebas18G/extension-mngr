@@ -5,11 +5,11 @@ import { getPool } from './pool';
  * Ejecuta db/001_init.sql dentro de una transacción.
  * El DDL es idempotente (IF NOT EXISTS), así que se puede llamar en cada activación.
  */
-export async function ensureSchema(extensionUri: vscode.Uri, secrets: vscode.SecretStorage): Promise<void> {
+export async function ensureSchema(extensionUri: vscode.Uri): Promise<void> {
   const sqlUri = vscode.Uri.joinPath(extensionUri, 'db', '001_init.sql');
   const sql = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(sqlUri));
 
-  const pool = await getPool(secrets);
+  const pool = await getPool();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { Pool } from 'pg';
 import * as vscode from 'vscode';
-import { getApiKey } from '../config/secrets';
+import { getApiKey } from '../config/env';
 import { getSettings } from '../config/settings';
 import { getPool, healthCheck, sanitizeError } from '../db/pool';
 import { ensureSchema } from '../db/schema';
@@ -31,10 +31,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private history: ChatMessage[] = [];
   private abortController?: AbortController;
 
-  constructor(
-    private readonly extensionUri: vscode.Uri,
-    private readonly secrets: vscode.SecretStorage,
-  ) {}
+  constructor(private readonly extensionUri: vscode.Uri) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
@@ -63,14 +60,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // El webview pide la lista al cargarse; "Reintentar" repite lo mismo tras un fallo de Postgres.
       case 'listSessions':
       case 'retry':
-        if (!(await this.checkDb())) {
-          return;
-        }
-        await this.refreshSessions({ reportErrors: true });
-        // Si el webview se recrea (p. ej. al ocultar y volver a mostrar el panel), restaura la sesión activa.
-        if (this.sessionId) {
-          await this.openSession(this.sessionId);
-        }
+        await this.reload();
         break;
       case 'openSession':
         await this.openSession(msg.sessionId);
@@ -82,14 +72,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Comprueba la base y, si responde, recarga la lista y la sesión activa.
+   * Público para que un cambio en `.env` refresque el panel sin pulsar "Reintentar".
+   */
+  async reload(): Promise<void> {
+    if (!this.view || this.abortController || !(await this.checkDb())) {
+      return;
+    }
+    await this.refreshSessions({ reportErrors: true });
+    // Si el webview se recrea (p. ej. al ocultar y volver a mostrar el panel), restaura la sesión activa.
+    if (this.sessionId) {
+      await this.openSession(this.sessionId);
+    }
+  }
+
+  /**
    * Health check + creación idempotente del schema. Informa al webview con `dbStatus` y devuelve si hay base.
    * Crear el schema aquí cubre el caso en que Postgres estaba caído durante la activación.
    */
   private async checkDb(): Promise<boolean> {
-    const status = await healthCheck(this.secrets);
+    const status = await healthCheck();
     if (status.ok) {
       try {
-        await ensureSchema(this.extensionUri, this.secrets);
+        await ensureSchema(this.extensionUri);
       } catch (err) {
         this.post({ type: 'dbStatus', ok: false, message: `No se pudo crear el schema vscode_chat: ${sanitizeError(err)}` });
         return false;
@@ -104,7 +109,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    * de un error puntual con la base disponible (se muestra como error normal).
    */
   private async reportDbFailure(prefix: string, err: unknown): Promise<void> {
-    const status = await healthCheck(this.secrets);
+    const status = await healthCheck();
     if (status.ok) {
       this.post({ type: 'error', message: `${prefix}: ${sanitizeError(err)}` });
     } else {
@@ -126,7 +131,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
     try {
       const settings = getSettings();
-      const pool = await getPool(this.secrets);
+      const pool = await getPool();
       const sessionId = await createSession(pool, { model: settings.model, baseUrl: settings.baseUrl });
       await this.openSession(sessionId);
       await this.refreshSessions({ reportErrors: false });
@@ -140,7 +145,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       return;
     }
     try {
-      const pool = await getPool(this.secrets);
+      const pool = await getPool();
       const session = await getSession(pool, sessionId);
       if (!session) {
         this.post({ type: 'error', message: 'La sesión ya no existe.' });
@@ -156,7 +161,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async refreshSessions({ reportErrors }: { reportErrors: boolean }): Promise<void> {
     try {
-      const pool = await getPool(this.secrets);
+      const pool = await getPool();
       this.post({ type: 'sessions', items: await listSessions(pool) });
     } catch (err) {
       if (reportErrors) {
@@ -174,9 +179,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this.abortController = controller;
 
     try {
-      const apiKey = await getApiKey(this.secrets);
-      if (!apiKey) {
-        this.post({ type: 'error', message: 'No hay API key. Ejecuta "LLM Chat: Configurar API key".' });
+      let apiKey: string;
+      try {
+        apiKey = await getApiKey();
+      } catch (err) {
+        this.post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
         return;
       }
 
@@ -186,7 +193,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // El mensaje del usuario se guarda antes de llamar al LLM: si Postgres falla, no se envía nada.
       let pool: Pool;
       try {
-        pool = await getPool(this.secrets);
+        pool = await getPool();
         if (!this.sessionId) {
           this.sessionId = await createSession(pool, {
             title: deriveTitle(text),
@@ -230,7 +237,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         } catch (err) {
           // La respuesta ya está en pantalla: se avisa explícitamente de que no quedó guardada.
           this.post({ type: 'error', message: `La respuesta no se guardó en Postgres: ${sanitizeError(err)}` });
-          const status = await healthCheck(this.secrets);
+          const status = await healthCheck();
           if (!status.ok) {
             this.post({ type: 'dbStatus', ok: false, message: status.message });
           }

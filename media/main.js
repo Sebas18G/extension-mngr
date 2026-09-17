@@ -3,6 +3,8 @@
   // @ts-ignore acquireVsCodeApi lo inyecta VS Code en el webview.
   const vscode = acquireVsCodeApi();
 
+  const sessionsEl = /** @type {HTMLUListElement} */ (document.getElementById('sessions'));
+  const newSessionBtn = /** @type {HTMLButtonElement} */ (document.getElementById('new-session'));
   const messagesEl = /** @type {HTMLElement} */ (document.getElementById('messages'));
   const errorEl = /** @type {HTMLElement} */ (document.getElementById('error'));
   const streamingEl = /** @type {HTMLElement} */ (document.getElementById('streaming'));
@@ -14,6 +16,10 @@
   /** @type {HTMLElement | null} */
   let currentReply = null;
   let streaming = false;
+  /** @type {string | null} */
+  let activeSessionId = null;
+  /** @type {any[]} */
+  let sessions = [];
 
   /**
    * @param {'system' | 'user' | 'assistant'} role
@@ -32,11 +38,69 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
+  /** @param {number | null} value */
+  function formatTokens(value) {
+    return value === null || value === undefined ? '—' : value.toLocaleString();
+  }
+
+  function renderSessions() {
+    sessionsEl.replaceChildren();
+    if (sessions.length === 0) {
+      const empty = document.createElement('li');
+      empty.className = 'empty';
+      empty.textContent = 'Aún no hay sesiones.';
+      sessionsEl.appendChild(empty);
+      return;
+    }
+    for (const session of sessions) {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'session';
+      button.disabled = streaming;
+      if (session.id === activeSessionId) {
+        button.classList.add('active');
+        button.setAttribute('aria-current', 'true');
+      }
+
+      const title = document.createElement('span');
+      title.className = 'session-title';
+      title.textContent = session.title;
+
+      const meta = document.createElement('span');
+      meta.className = 'session-meta';
+      meta.textContent = `${new Date(session.updatedAt).toLocaleString()} · ${formatTokens(session.totalTokens)} tokens`;
+
+      button.append(title, meta);
+      button.addEventListener('click', () => {
+        if (!streaming && session.id !== activeSessionId) {
+          vscode.postMessage({ type: 'openSession', sessionId: session.id });
+        }
+      });
+      item.appendChild(button);
+      sessionsEl.appendChild(item);
+    }
+  }
+
+  /** @param {any} session */
+  function loadSession(session) {
+    activeSessionId = session.id;
+    currentReply = null;
+    messagesEl.replaceChildren();
+    for (const message of session.messages) {
+      addBubble(message.role, message.content);
+    }
+    showError(null);
+    renderSessions();
+    input.focus();
+  }
+
   /** @param {boolean} value */
   function setStreaming(value) {
     streaming = value;
     streamingEl.hidden = !value;
     sendBtn.disabled = value;
+    newSessionBtn.disabled = value;
     if (!value) {
       if (currentReply && !currentReply.textContent) {
         currentReply.remove();
@@ -44,6 +108,7 @@
       currentReply = null;
       input.focus();
     }
+    renderSessions();
   }
 
   /** @param {string | null} message */
@@ -81,9 +146,26 @@
     vscode.postMessage({ type: 'cancel' });
   });
 
+  newSessionBtn.addEventListener('click', () => {
+    if (!streaming) {
+      vscode.postMessage({ type: 'newSession' });
+    }
+  });
+
   window.addEventListener('message', (event) => {
     const msg = event.data;
     switch (msg.type) {
+      case 'sessions':
+        sessions = msg.items;
+        // Tras el primer envío de una sesión nueva, la activa es la más reciente.
+        if (!activeSessionId && sessions.length > 0 && messagesEl.childElementCount > 0) {
+          activeSessionId = sessions[0].id;
+        }
+        renderSessions();
+        break;
+      case 'sessionLoaded':
+        loadSession(msg.session);
+        break;
       case 'delta':
         if (currentReply) {
           currentReply.textContent += msg.text;
@@ -100,5 +182,7 @@
     }
   });
 
+  renderSessions();
+  vscode.postMessage({ type: 'listSessions' });
   input.focus();
 })();

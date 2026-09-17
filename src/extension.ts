@@ -5,14 +5,15 @@ import { ensureSchema } from './db/schema';
 import { ChatViewProvider } from './panel/ChatViewProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      ChatViewProvider.viewType,
-      new ChatViewProvider(context.extensionUri, context.secrets),
-    ),
-  );
+  const chatView = new ChatViewProvider(context.extensionUri, context.secrets);
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatView));
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('llmChat.newSession', async () => {
+      await vscode.commands.executeCommand(`${ChatViewProvider.viewType}.focus`);
+      await chatView.newSession();
+    }),
+
     vscode.commands.registerCommand('llmChat.testConnection', async () => {
       const status = await healthCheck(context.secrets);
       if (status.ok) {

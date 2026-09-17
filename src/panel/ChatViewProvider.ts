@@ -4,7 +4,14 @@ import * as vscode from 'vscode';
 import { getApiKey } from '../config/secrets';
 import { getSettings } from '../config/settings';
 import { getPool, sanitizeError } from '../db/pool';
-import { appendMessage, createSession, saveUsage } from '../db/sessions';
+import {
+  appendMessage,
+  createSession,
+  getSession,
+  listSessions,
+  saveUsage,
+  updateSessionTitle,
+} from '../db/sessions';
 import { ChatMessage, streamChat } from '../llm/client';
 import { Usage } from '../types';
 import { ToHost, ToWebview } from './protocol';
@@ -52,6 +59,72 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       case 'cancel':
         this.abortController?.abort();
         break;
+      case 'listSessions':
+        await this.refreshSessions({ reportErrors: true });
+        // Si el webview se recrea (p. ej. al ocultar y volver a mostrar el panel), restaura la sesión activa.
+        if (this.sessionId) {
+          await this.openSession(this.sessionId);
+        }
+        break;
+      case 'openSession':
+        await this.openSession(msg.sessionId);
+        break;
+      case 'newSession':
+        await this.newSession();
+        break;
+    }
+  }
+
+  /**
+   * Crea una sesión vacía con título "Nueva sesión" y la abre.
+   * Si la sesión activa todavía no tiene mensajes, se reutiliza en vez de crear otra vacía.
+   */
+  async newSession(): Promise<void> {
+    if (this.abortController) {
+      return;
+    }
+    if (this.sessionId && this.history.length === 0) {
+      await this.openSession(this.sessionId);
+      return;
+    }
+    try {
+      const settings = getSettings();
+      const pool = await getPool(this.secrets);
+      const sessionId = await createSession(pool, { model: settings.model, baseUrl: settings.baseUrl });
+      await this.openSession(sessionId);
+      await this.refreshSessions({ reportErrors: false });
+    } catch (err) {
+      this.post({ type: 'error', message: `No se pudo crear la sesión: ${sanitizeError(err)}` });
+    }
+  }
+
+  private async openSession(sessionId: string): Promise<void> {
+    if (this.abortController) {
+      return;
+    }
+    try {
+      const pool = await getPool(this.secrets);
+      const session = await getSession(pool, sessionId);
+      if (!session) {
+        this.post({ type: 'error', message: 'La sesión ya no existe.' });
+        return;
+      }
+      this.sessionId = session.id;
+      this.history = session.messages.map((m) => ({ role: m.role, content: m.content }));
+      this.post({ type: 'sessionLoaded', session });
+    } catch (err) {
+      this.post({ type: 'error', message: `No se pudo cargar la sesión: ${sanitizeError(err)}` });
+    }
+  }
+
+  private async refreshSessions({ reportErrors }: { reportErrors: boolean }): Promise<void> {
+    try {
+      const pool = await getPool(this.secrets);
+      this.post({ type: 'sessions', items: await listSessions(pool) });
+    } catch (err) {
+      if (reportErrors) {
+        this.post({ type: 'error', message: `No se pudo cargar la lista de sesiones: ${sanitizeError(err)}` });
+      }
     }
   }
 
@@ -83,6 +156,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             model: settings.model,
             baseUrl: settings.baseUrl,
           });
+        } else if (this.history.length === 0) {
+          // Sesión creada vacía con "Nueva sesión": el título pasa a derivarse del primer mensaje.
+          await updateSessionTitle(pool, this.sessionId, deriveTitle(text));
         }
         await appendMessage(pool, this.sessionId, 'user', text);
       } catch (err) {
@@ -126,6 +202,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     } finally {
       this.abortController = undefined;
+      // updated_at y el total de tokens cambiaron: la lista se reordena.
+      await this.refreshSessions({ reportErrors: false });
     }
   }
 
@@ -149,6 +227,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
   <main id="chat">
+    <section id="sessions-section">
+      <header class="section-header">
+        <h2>Sesiones</h2>
+        <button id="new-session" type="button" class="secondary">Nueva sesión</button>
+      </header>
+      <ul id="sessions" class="sessions"></ul>
+    </section>
     <div id="messages" aria-live="polite"></div>
     <div id="error" class="error" hidden></div>
     <div id="streaming" class="streaming" hidden>

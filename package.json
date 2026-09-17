@@ -42,6 +42,11 @@
         "command": "llmChat.setPostgresUrl",
         "title": "Configurar conexión a Postgres",
         "category": "LLM Chat"
+      },
+      {
+        "command": "llmChat.newSession",
+        "title": "Nueva sesión",
+        "category": "LLM Chat"
       }
     ],
     "configuration": {

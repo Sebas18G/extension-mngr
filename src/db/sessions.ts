@@ -20,6 +20,10 @@ export async function createSession(pool: Pool, input: NewSession): Promise<stri
   return id;
 }
 
+export async function updateSessionTitle(pool: Pool, sessionId: string, title: string): Promise<void> {
+  await pool.query(`UPDATE vscode_chat.sessions SET title = $2 WHERE id = $1`, [sessionId, title]);
+}
+
 export async function listSessions(pool: Pool): Promise<SessionSummary[]> {
   const { rows } = await pool.query(
     `SELECT s.id, s.title, s.model, s.base_url, s.created_at, s.updated_at,

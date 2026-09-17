@@ -12,6 +12,10 @@
   const form = /** @type {HTMLFormElement} */ (document.getElementById('composer'));
   const input = /** @type {HTMLTextAreaElement} */ (document.getElementById('input'));
   const sendBtn = /** @type {HTMLButtonElement} */ (document.getElementById('send'));
+  const usagePromptEl = /** @type {HTMLElement} */ (document.getElementById('usage-prompt'));
+  const usageCompletionEl = /** @type {HTMLElement} */ (document.getElementById('usage-completion'));
+  const usageTotalEl = /** @type {HTMLElement} */ (document.getElementById('usage-total'));
+  const usageGlobalEl = /** @type {HTMLElement} */ (document.getElementById('usage-global'));
 
   /** @type {HTMLElement | null} */
   let currentReply = null;
@@ -44,6 +48,7 @@
   }
 
   function renderSessions() {
+    renderUsage();
     sessionsEl.replaceChildren();
     if (sessions.length === 0) {
       const empty = document.createElement('li');
@@ -69,7 +74,7 @@
 
       const meta = document.createElement('span');
       meta.className = 'session-meta';
-      meta.textContent = `${new Date(session.updatedAt).toLocaleString()} · ${formatTokens(session.totalTokens)} tokens`;
+      meta.textContent = `${new Date(session.updatedAt).toLocaleString()} · ${formatTokens(session.usage.total_tokens)} tokens`;
 
       button.append(title, meta);
       button.addEventListener('click', () => {
@@ -80,6 +85,20 @@
       item.appendChild(button);
       sessionsEl.appendChild(item);
     }
+  }
+
+  /**
+   * Sesión activa: sus SUM tal como llegan de Postgres.
+   * Global: suma de los totales de todas las sesiones; como SUM en SQL, ignora NULL y es NULL si no hay ningún valor.
+   */
+  function renderUsage() {
+    const active = sessions.find((s) => s.id === activeSessionId);
+    usagePromptEl.textContent = formatTokens(active ? active.usage.prompt_tokens : null);
+    usageCompletionEl.textContent = formatTokens(active ? active.usage.completion_tokens : null);
+    usageTotalEl.textContent = formatTokens(active ? active.usage.total_tokens : null);
+
+    const known = sessions.map((s) => s.usage.total_tokens).filter((t) => t !== null && t !== undefined);
+    usageGlobalEl.textContent = formatTokens(known.length > 0 ? known.reduce((a, b) => a + b, 0) : null);
   }
 
   /** @param {any} session */

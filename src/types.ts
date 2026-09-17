@@ -14,7 +14,8 @@ export interface SessionSummary {
   baseUrl: string;
   createdAt: string;
   updatedAt: string;
-  totalTokens: number | null;
+  /** SUM sobre message_usage de la sesión, calculado al consultar. */
+  usage: Usage;
 }
 
 export interface StoredMessage {

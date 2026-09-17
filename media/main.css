@@ -90,6 +90,36 @@ button.session.active {
   opacity: 0.8;
 }
 
+#usage-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--vscode-panel-border, transparent);
+}
+
+table.usage {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+table.usage th,
+table.usage td {
+  padding: 2px 4px;
+  text-align: right;
+}
+
+table.usage th {
+  font-weight: normal;
+  color: var(--vscode-descriptionForeground);
+}
+
+table.usage th[scope='row'] {
+  text-align: left;
+}
+
 #messages {
   flex: 1;
   overflow-y: auto;

@@ -234,6 +234,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       </header>
       <ul id="sessions" class="sessions"></ul>
     </section>
+    <section id="usage-section">
+      <header class="section-header">
+        <h2>Consumo</h2>
+      </header>
+      <table class="usage">
+        <thead>
+          <tr><th></th><th>Prompt</th><th>Completion</th><th>Total</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Sesión</th>
+            <td id="usage-prompt">—</td>
+            <td id="usage-completion">—</td>
+            <td id="usage-total">—</td>
+          </tr>
+          <tr>
+            <th scope="row">Global</th>
+            <td colspan="2"></td>
+            <td id="usage-global">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
     <div id="messages" aria-live="polite"></div>
     <div id="error" class="error" hidden></div>
     <div id="streaming" class="streaming" hidden>

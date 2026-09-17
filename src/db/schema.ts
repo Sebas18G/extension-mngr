@@ -8,6 +8,13 @@ import { getPool } from './pool';
 const MIGRATIONS = ['001_init.sql', '002_message_context.sql'];
 
 /**
+ * Clave del advisory lock que serializa las migraciones. `ensureSchema` se llama a la vez desde la
+ * activación y desde el panel (y desde otras ventanas): sin el lock, la FK de 002 sobre `messages`
+ * choca con el CREATE INDEX de 001 en la otra transacción y Postgres aborta una por deadlock.
+ */
+const SCHEMA_LOCK_KEY = 7_302_418_001;
+
+/**
  * Ejecuta las migraciones de `db/` dentro de una misma transacción.
  * El DDL es idempotente (IF NOT EXISTS), así que se puede llamar en cada activación.
  */
@@ -23,6 +30,8 @@ export async function ensureSchema(extensionUri: vscode.Uri): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Se libera solo al hacer COMMIT o ROLLBACK.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [SCHEMA_LOCK_KEY]);
     for (const sql of scripts) {
       await client.query(sql);
     }

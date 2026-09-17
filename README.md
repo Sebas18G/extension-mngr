@@ -152,7 +152,7 @@ No hay tests automáticos: se prueba a mano en un Extension Development Host.
 
 1. Ejecuta `npm install` y arranca Postgres.
 2. Abre el proyecto en VS Code y pulsa **F5** (configuración "Run Extension"). Compila y abre una segunda ventana **[Extension Development Host]** con la extensión cargada.
-3. En esa ventana, abre con **File → Open Folder** una carpeta que tenga `.env` en la raíz. El `.env` se lee de la carpeta abierta en esa ventana, no de este repositorio. Puedes abrir este mismo repo para tener archivos con los que probar los adjuntos.
+3. La ventana de pruebas abre este mismo repo, así que usa su `.env` y tiene archivos para probar los adjuntos. El `.env` se lee siempre de la carpeta abierta en esa ventana: si abres otra con **File → Open Folder**, debe tener su propio `.env` en la raíz.
 4. Abre el panel **LLM Chat** en la Activity Bar.
 
 Tras cambiar código TypeScript, reinicia la depuración con **Ctrl+Shift+F5**. Si solo cambiaste `media/main.js` o `media/main.css`, basta con **Ctrl+R** en la ventana de pruebas.

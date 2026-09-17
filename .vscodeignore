@@ -1,4 +1,6 @@
+.gitignore
 .vscode/**
+*.vsix
 .agents/**
 .claude/**
 specs/**

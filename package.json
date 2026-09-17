@@ -1,7 +1,15 @@
 {
   "name": "llm-chat",
+  "displayName": "LLM Chat",
+  "description": "Chat con cualquier endpoint compatible con OpenAI, con sesiones guardadas en Postgres y consumo de tokens por sesión.",
   "version": "0.0.1",
+  "publisher": "sebas18g",
   "private": true,
+  "icon": "media/icon.png",
+  "categories": [
+    "AI",
+    "Chat"
+  ],
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -83,12 +91,15 @@
   "scripts": {
     "compile": "npm run check-types && node esbuild.js",
     "watch": "node esbuild.js --watch",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "vscode:prepublish": "npm run check-types && node esbuild.js --production",
+    "package": "vsce package --allow-missing-repository --skip-license"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/pg": "^8.23.1",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.5.0"
   },

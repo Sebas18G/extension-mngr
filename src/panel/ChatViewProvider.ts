@@ -3,18 +3,23 @@ import { Pool } from 'pg';
 import * as vscode from 'vscode';
 import { getApiKey } from '../config/env';
 import { getSettings } from '../config/settings';
+import { resolveAttachments } from '../context/attachments';
+import { applyBudget, buildUserContent, estimateBase, sessionOverLimitMessage } from '../context/budget';
+import { dedupeRefs, parseMentions, suggestMentions } from '../context/mentions';
+import { findWorkspaceFiles } from '../context/tree';
 import { getPool, healthCheck, sanitizeError } from '../db/pool';
 import { ensureSchema } from '../db/schema';
 import {
   appendMessage,
   createSession,
+  getMessageContexts,
   getSession,
   listSessions,
   saveUsage,
   updateSessionTitle,
 } from '../db/sessions';
 import { ChatMessage, streamChat } from '../llm/client';
-import { Usage } from '../types';
+import { AttachmentRef, AttachmentWithContent, Usage } from '../types';
 import { ToHost, ToWebview } from './protocol';
 
 const TITLE_LENGTH = 60;
@@ -52,10 +57,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private async handleMessage(msg: ToHost): Promise<void> {
     switch (msg.type) {
       case 'send':
-        await this.send(msg.text);
+        await this.send(msg.text, msg.attachments ?? []);
         break;
       case 'cancel':
         this.abortController?.abort();
+        break;
+      case 'pickFile':
+        await this.pickFile();
+        break;
+      case 'searchFiles':
+        await this.searchFiles(msg.query);
         break;
       // El webview pide la lista al cargarse; "Reintentar" repite lo mismo tras un fallo de Postgres.
       case 'listSessions':
@@ -151,12 +162,46 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.post({ type: 'error', message: 'La sesión ya no existe.' });
         return;
       }
+      // El historial usa el contenido guardado de los adjuntos, no el archivo actual, para reenviar lo mismo.
+      const contexts = await getMessageContexts(pool, session.id);
       this.sessionId = session.id;
-      this.history = session.messages.map((m) => ({ role: m.role, content: m.content }));
+      this.history = session.messages.map((m) => ({
+        role: m.role,
+        content: m.role === 'user' ? buildUserContent(m.content, contexts.get(m.id) ?? []) : m.content,
+      }));
       this.post({ type: 'sessionLoaded', session });
     } catch (err) {
       await this.reportDbFailure('No se pudo cargar la sesión', err);
     }
+  }
+
+  /** Abre un QuickPick con los archivos del workspace; el elegido vuelve al webview como chip `file`. */
+  private async pickFile(): Promise<void> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      this.post({ type: 'error', message: 'No hay ninguna carpeta abierta en el workspace.' });
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(findWorkspaceFiles(folder), {
+      title: 'Adjuntar archivo',
+      placeHolder: 'Busca un archivo del workspace',
+      matchOnDescription: true,
+    });
+    if (picked) {
+      this.post({ type: 'filePicked', path: picked });
+    }
+  }
+
+  /** Autocompletado de `@`: la respuesta repite la consulta para que el webview descarte respuestas viejas. */
+  private async searchFiles(query: string): Promise<void> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    let files: string[] = [];
+    try {
+      files = folder ? await findWorkspaceFiles(folder) : [];
+    } catch {
+      // Sin lista de archivos se sugieren solo las palabras reservadas; el error real saldrá al enviar.
+    }
+    this.post({ type: 'fileSuggestions', query, items: suggestMentions(query, files) });
   }
 
   private async refreshSessions({ reportErrors }: { reportErrors: boolean }): Promise<void> {
@@ -170,7 +215,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async send(text: string): Promise<void> {
+  private async send(text: string, refs: AttachmentRef[]): Promise<void> {
     if (this.abortController || !text.trim()) {
       return;
     }
@@ -190,6 +235,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // Los ajustes se leen en cada envío para que los cambios apliquen sin reiniciar.
       const settings = getSettings();
 
+      // Se comprueba antes de tocar la base: si el historial ya no cabe, no se guarda nada.
+      const base = estimateBase(settings.systemPrompt, this.history, text);
+      if (base > settings.maxContextTokens) {
+        this.post({ type: 'error', message: sessionOverLimitMessage(base) });
+        return;
+      }
+
+      // El contenido se captura ahora, al enviar. Si un adjunto falla, no se guarda ni se envía nada.
+      const remaining = settings.maxContextTokens - base;
+      let attachments: AttachmentWithContent[];
+      try {
+        // Chips primero y después menciones, sin duplicados.
+        const allRefs = dedupeRefs([...refs, ...parseMentions(text)]);
+        const resolved = await resolveAttachments(allRefs, remaining * 4);
+        attachments = applyBudget(resolved, remaining);
+      } catch (err) {
+        this.post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+        return;
+      }
+      const userContent = buildUserContent(text, attachments);
+
       // El mensaje del usuario se guarda antes de llamar al LLM: si Postgres falla, no se envía nada.
       let pool: Pool;
       try {
@@ -204,13 +270,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           // Sesión creada vacía con "Nueva sesión": el título pasa a derivarse del primer mensaje.
           await updateSessionTitle(pool, this.sessionId, deriveTitle(text));
         }
-        await appendMessage(pool, this.sessionId, 'user', text);
+        await appendMessage(pool, this.sessionId, 'user', text, attachments);
       } catch (err) {
         // No se llama al LLM: el mensaje no quedó guardado.
         await this.reportDbFailure('No se pudo guardar el mensaje en Postgres', err);
         return;
       }
-      this.history.push({ role: 'user', content: text });
+      this.history.push({ role: 'user', content: userContent });
+      this.post({
+        type: 'userMessageSaved',
+        attachments: attachments.map(({ content: _content, ...meta }) => meta),
+      });
 
       const messages: ChatMessage[] = settings.systemPrompt
         ? [{ role: 'system', content: settings.systemPrompt }, ...this.history]
@@ -318,6 +388,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       <button id="cancel" type="button" class="secondary">Cancelar</button>
     </div>
     <form id="composer">
+      <div class="attach-bar">
+        <button id="attach-active" type="button" class="secondary">Archivo activo</button>
+        <button id="attach-selection" type="button" class="secondary">Selección</button>
+        <button id="attach-tree" type="button" class="secondary">Árbol</button>
+        <button id="attach-file" type="button" class="secondary">Archivo…</button>
+      </div>
+      <ul id="chips" class="chips" hidden></ul>
+      <ul id="suggestions" class="suggestions" role="listbox" aria-label="Sugerencias de adjuntos" hidden></ul>
       <textarea id="input" rows="3" placeholder="Escribe un mensaje (Enter para enviar, Shift+Enter para nueva línea)"></textarea>
       <button id="send" type="submit">Enviar</button>
     </form>

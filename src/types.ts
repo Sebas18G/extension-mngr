@@ -18,11 +18,35 @@ export interface SessionSummary {
   usage: Usage;
 }
 
+export type AttachmentKind = 'activeFile' | 'selection' | 'tree' | 'file';
+
+/** Lo que el webview pide adjuntar. El contenido se resuelve en la extensión al enviar. */
+export type AttachmentRef =
+  | { kind: 'activeFile' }
+  | { kind: 'selection' }
+  | { kind: 'tree' }
+  | { kind: 'file'; path: string };
+
+export interface StoredAttachment {
+  kind: AttachmentKind;
+  path: string | null;
+  startLine: number | null;
+  endLine: number | null;
+  truncated: boolean;
+  estTokens: number;
+}
+
+/** Adjunto con el texto exacto enviado al LLM. Solo vive en la extensión; no viaja al webview. */
+export interface AttachmentWithContent extends StoredAttachment {
+  content: string;
+}
+
 export interface StoredMessage {
   id: string;
   role: Role;
   content: string;
   createdAt: string;
+  attachments: StoredAttachment[]; // vacío en mensajes de assistant
 }
 
 export interface SessionDetail extends SessionSummary {

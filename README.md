@@ -146,6 +146,43 @@ npm run package     # genera llm-chat-<versión>.vsix
 code --install-extension llm-chat-0.0.1.vsix
 ```
 
-Para depurar, abre el proyecto en VS Code y pulsa F5 (ejecuta `npm: compile` y lanza un Extension Development Host). Recuerda que el `.env` se lee de la carpeta abierta en esa ventana, no de este repositorio.
+### Probar la extensión
+
+No hay tests automáticos: se prueba a mano en un Extension Development Host.
+
+1. Ejecuta `npm install` y arranca Postgres.
+2. Abre el proyecto en VS Code y pulsa **F5** (configuración "Run Extension"). Compila y abre una segunda ventana **[Extension Development Host]** con la extensión cargada.
+3. En esa ventana, abre con **File → Open Folder** una carpeta que tenga `.env` en la raíz. El `.env` se lee de la carpeta abierta en esa ventana, no de este repositorio. Puedes abrir este mismo repo para tener archivos con los que probar los adjuntos.
+4. Abre el panel **LLM Chat** en la Activity Bar.
+
+Tras cambiar código TypeScript, reinicia la depuración con **Ctrl+Shift+F5**. Si solo cambiaste `media/main.js` o `media/main.css`, basta con **Ctrl+R** en la ventana de pruebas.
+
+Pruebas rápidas de los adjuntos:
+
+| Prueba | Resultado esperado |
+| --- | --- |
+| Abrir un archivo, pulsar **Archivo activo** y preguntar por él | El modelo lo conoce; la burbuja muestra la ruta. |
+| Editar sin guardar y adjuntar el archivo activo | El modelo ve los cambios sin guardar. |
+| Seleccionar líneas y pulsar **Selección** | La burbuja muestra las líneas seleccionadas. |
+| **Selección** sin texto seleccionado y enviar | Error; el texto y el chip vuelven al input. |
+| **Árbol** | No aparecen `node_modules/` ni `dist/`. |
+| **Archivo…** y elegir `src/db/pool.ts` | Aparece un chip con esa ruta. |
+| Escribir `explica @src/db/pool.ts` sin chips | La burbuja muestra el adjunto. |
+| Escribir `@po` y pulsar Enter | Se completa la ruta y no se envía el mensaje. |
+| `escribe a usuario@dominio.com` | No se crea ningún adjunto. |
+| `@media/icon.png` o `@../otro.txt` | Error; no se guarda el mensaje. |
+| `llmChat.maxContextTokens: 1000` y adjuntar un archivo grande | La burbuja muestra `truncado`. |
+| `llmChat.maxContextTokens: 50` en una sesión con mensajes | Error que pide abrir una nueva sesión. |
+| Modificar un archivo adjunto, recargar y reabrir la sesión | El historial usa el contenido guardado, no el actual. |
+
+Para ver lo guardado:
+
+```sql
+SELECT message_id, kind, path, start_line, end_line, truncated, est_tokens
+  FROM vscode_chat.message_context
+ ORDER BY id DESC;
+```
+
+Si algo falla, los errores de la extensión salen en la **Debug Console** de la ventana original y los del webview en **Developer: Open Webview Developer Tools** dentro de la ventana de pruebas. La lista completa de criterios está en la sección 5 de cada spec.
 
 Las funcionalidades nuevas se diseñan primero como spec en `specs/` con las skills `/spec` y `/spec-impl`.

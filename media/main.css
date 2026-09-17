@@ -20,6 +20,31 @@ body {
   box-sizing: border-box;
 }
 
+.db-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--vscode-inputValidation-errorBackground);
+  border: 1px solid var(--vscode-inputValidation-errorBorder);
+  color: var(--vscode-errorForeground);
+}
+
+.db-status[hidden] {
+  display: none;
+}
+
+.db-status span {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+textarea:disabled {
+  opacity: 0.5;
+}
+
 #sessions-section {
   display: flex;
   flex-direction: column;

@@ -16,10 +16,19 @@
   const usageCompletionEl = /** @type {HTMLElement} */ (document.getElementById('usage-completion'));
   const usageTotalEl = /** @type {HTMLElement} */ (document.getElementById('usage-total'));
   const usageGlobalEl = /** @type {HTMLElement} */ (document.getElementById('usage-global'));
+  const dbStatusEl = /** @type {HTMLElement} */ (document.getElementById('db-status'));
+  const dbStatusMessageEl = /** @type {HTMLElement} */ (document.getElementById('db-status-message'));
+  const retryBtn = /** @type {HTMLButtonElement} */ (document.getElementById('retry'));
 
   /** @type {HTMLElement | null} */
   let currentReply = null;
+  /** Burbuja y texto del envío en curso, para deshacerlos si Postgres no llegó a guardar el mensaje. */
+  /** @type {HTMLElement | null} */
+  let pendingUserBubble = null;
+  let pendingText = '';
   let streaming = false;
+  // Hasta recibir el primer dbStatus no se permite enviar.
+  let dbOk = false;
   /** @type {string | null} */
   let activeSessionId = null;
   /** @type {any[]} */
@@ -62,7 +71,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'session';
-      button.disabled = streaming;
+      button.disabled = streaming || !dbOk;
       if (session.id === activeSessionId) {
         button.classList.add('active');
         button.setAttribute('aria-current', 'true');
@@ -78,7 +87,7 @@
 
       button.append(title, meta);
       button.addEventListener('click', () => {
-        if (!streaming && session.id !== activeSessionId) {
+        if (!streaming && dbOk && session.id !== activeSessionId) {
           vscode.postMessage({ type: 'openSession', sessionId: session.id });
         }
       });
@@ -118,16 +127,48 @@
   function setStreaming(value) {
     streaming = value;
     streamingEl.hidden = !value;
-    sendBtn.disabled = value;
-    newSessionBtn.disabled = value;
     if (!value) {
       if (currentReply && !currentReply.textContent) {
         currentReply.remove();
       }
       currentReply = null;
+      pendingUserBubble = null;
+      pendingText = '';
       input.focus();
     }
+    updateControls();
+  }
+
+  function updateControls() {
+    const blocked = streaming || !dbOk;
+    input.disabled = !dbOk;
+    sendBtn.disabled = blocked;
+    newSessionBtn.disabled = blocked;
     renderSessions();
+  }
+
+  /**
+   * @param {boolean} ok
+   * @param {string | undefined} message
+   */
+  function setDbStatus(ok, message) {
+    dbOk = ok;
+    dbStatusEl.hidden = ok;
+    dbStatusMessageEl.textContent = ok ? '' : `Postgres no responde: ${message ?? 'error desconocido'}`;
+    retryBtn.disabled = false;
+
+    if (!ok && streaming) {
+      // El mensaje no llegó a guardarse: se quita de la conversación y se devuelve al input.
+      if (pendingUserBubble && currentReply && !currentReply.textContent) {
+        pendingUserBubble.remove();
+        if (!input.value) {
+          input.value = pendingText;
+        }
+      }
+      setStreaming(false);
+    } else {
+      updateControls();
+    }
   }
 
   /** @param {string | null} message */
@@ -138,11 +179,12 @@
 
   function send() {
     const text = input.value.trim();
-    if (!text || streaming) {
+    if (!text || streaming || !dbOk) {
       return;
     }
     showError(null);
-    addBubble('user', text);
+    pendingUserBubble = addBubble('user', text);
+    pendingText = text;
     currentReply = addBubble('assistant', '');
     input.value = '';
     setStreaming(true);
@@ -166,9 +208,14 @@
   });
 
   newSessionBtn.addEventListener('click', () => {
-    if (!streaming) {
+    if (!streaming && dbOk) {
       vscode.postMessage({ type: 'newSession' });
     }
+  });
+
+  retryBtn.addEventListener('click', () => {
+    retryBtn.disabled = true;
+    vscode.postMessage({ type: 'retry' });
   });
 
   window.addEventListener('message', (event) => {
@@ -198,10 +245,13 @@
         setStreaming(false);
         showError(msg.message);
         break;
+      case 'dbStatus':
+        setDbStatus(msg.ok, msg.message);
+        break;
     }
   });
 
-  renderSessions();
+  updateControls();
   vscode.postMessage({ type: 'listSessions' });
   input.focus();
 })();

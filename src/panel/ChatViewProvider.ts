@@ -3,7 +3,8 @@ import { Pool } from 'pg';
 import * as vscode from 'vscode';
 import { getApiKey } from '../config/secrets';
 import { getSettings } from '../config/settings';
-import { getPool, sanitizeError } from '../db/pool';
+import { getPool, healthCheck, sanitizeError } from '../db/pool';
+import { ensureSchema } from '../db/schema';
 import {
   appendMessage,
   createSession,
@@ -59,7 +60,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       case 'cancel':
         this.abortController?.abort();
         break;
+      // El webview pide la lista al cargarse; "Reintentar" repite lo mismo tras un fallo de Postgres.
       case 'listSessions':
+      case 'retry':
+        if (!(await this.checkDb())) {
+          return;
+        }
         await this.refreshSessions({ reportErrors: true });
         // Si el webview se recrea (p. ej. al ocultar y volver a mostrar el panel), restaura la sesión activa.
         if (this.sessionId) {
@@ -72,6 +78,37 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       case 'newSession':
         await this.newSession();
         break;
+    }
+  }
+
+  /**
+   * Health check + creación idempotente del schema. Informa al webview con `dbStatus` y devuelve si hay base.
+   * Crear el schema aquí cubre el caso en que Postgres estaba caído durante la activación.
+   */
+  private async checkDb(): Promise<boolean> {
+    const status = await healthCheck(this.secrets);
+    if (status.ok) {
+      try {
+        await ensureSchema(this.extensionUri, this.secrets);
+      } catch (err) {
+        this.post({ type: 'dbStatus', ok: false, message: `No se pudo crear el schema vscode_chat: ${sanitizeError(err)}` });
+        return false;
+      }
+    }
+    this.post({ type: 'dbStatus', ok: status.ok, message: status.message });
+    return status.ok;
+  }
+
+  /**
+   * Ante un error de base, distingue "Postgres no responde" (estado degradado, input bloqueado)
+   * de un error puntual con la base disponible (se muestra como error normal).
+   */
+  private async reportDbFailure(prefix: string, err: unknown): Promise<void> {
+    const status = await healthCheck(this.secrets);
+    if (status.ok) {
+      this.post({ type: 'error', message: `${prefix}: ${sanitizeError(err)}` });
+    } else {
+      this.post({ type: 'dbStatus', ok: false, message: status.message });
     }
   }
 
@@ -94,7 +131,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       await this.openSession(sessionId);
       await this.refreshSessions({ reportErrors: false });
     } catch (err) {
-      this.post({ type: 'error', message: `No se pudo crear la sesión: ${sanitizeError(err)}` });
+      await this.reportDbFailure('No se pudo crear la sesión', err);
     }
   }
 
@@ -113,7 +150,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       this.history = session.messages.map((m) => ({ role: m.role, content: m.content }));
       this.post({ type: 'sessionLoaded', session });
     } catch (err) {
-      this.post({ type: 'error', message: `No se pudo cargar la sesión: ${sanitizeError(err)}` });
+      await this.reportDbFailure('No se pudo cargar la sesión', err);
     }
   }
 
@@ -123,7 +160,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       this.post({ type: 'sessions', items: await listSessions(pool) });
     } catch (err) {
       if (reportErrors) {
-        this.post({ type: 'error', message: `No se pudo cargar la lista de sesiones: ${sanitizeError(err)}` });
+        await this.reportDbFailure('No se pudo cargar la lista de sesiones', err);
       }
     }
   }
@@ -162,7 +199,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
         await appendMessage(pool, this.sessionId, 'user', text);
       } catch (err) {
-        this.post({ type: 'error', message: `No se pudo guardar el mensaje en Postgres: ${sanitizeError(err)}` });
+        // No se llama al LLM: el mensaje no quedó guardado.
+        await this.reportDbFailure('No se pudo guardar el mensaje en Postgres', err);
         return;
       }
       this.history.push({ role: 'user', content: text });
@@ -190,7 +228,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           await saveUsage(pool, messageId, usage, settings.model);
           this.history.push({ role: 'assistant', content: reply });
         } catch (err) {
-          this.post({ type: 'error', message: `No se pudo guardar la respuesta en Postgres: ${sanitizeError(err)}` });
+          // La respuesta ya está en pantalla: se avisa explícitamente de que no quedó guardada.
+          this.post({ type: 'error', message: `La respuesta no se guardó en Postgres: ${sanitizeError(err)}` });
+          const status = await healthCheck(this.secrets);
+          if (!status.ok) {
+            this.post({ type: 'dbStatus', ok: false, message: status.message });
+          }
           return;
         }
       }
@@ -227,6 +270,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
   <main id="chat">
+    <div id="db-status" class="db-status" role="alert" hidden>
+      <span id="db-status-message"></span>
+      <button id="retry" type="button">Reintentar</button>
+    </div>
     <section id="sessions-section">
       <header class="section-header">
         <h2>Sesiones</h2>

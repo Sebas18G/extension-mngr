@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Pool } from 'pg';
-import { Role, SessionDetail, SessionSummary, StoredMessage, Usage } from '../types';
+import { AttachmentWithContent, Role, SessionDetail, SessionSummary, StoredMessage, Usage } from '../types';
 
 export const DEFAULT_TITLE = 'Nueva sesión';
 
@@ -58,23 +58,69 @@ export async function getSession(pool: Pool, sessionId: string): Promise<Session
       ORDER BY id`,
     [sessionId],
   );
+  const contexts = await getMessageContexts(pool, sessionId);
 
   return {
     ...toSummary(rows[0]),
     usage,
-    messages: messages.rows.map(
-      (r): StoredMessage => ({
-        id: String(r.id),
+    messages: messages.rows.map((r): StoredMessage => {
+      const id = String(r.id);
+      return {
+        id,
         role: r.role,
         content: r.content,
         createdAt: new Date(r.created_at).toISOString(),
-      }),
-    ),
+        // Sin `content`: el webview solo muestra los metadatos del adjunto.
+        attachments: (contexts.get(id) ?? []).map(({ content: _content, ...meta }) => meta),
+      };
+    }),
   };
 }
 
-/** Inserta un mensaje y actualiza sessions.updated_at en la misma transacción. Devuelve el id del mensaje. */
-export async function appendMessage(pool: Pool, sessionId: string, role: Role, content: string): Promise<string> {
+/**
+ * Adjuntos de todos los mensajes de una sesión, con el `content` exacto que se envió,
+ * agrupados por id de mensaje y en orden de `position`. Sirve para reconstruir el historial.
+ */
+export async function getMessageContexts(pool: Pool, sessionId: string): Promise<Map<string, AttachmentWithContent[]>> {
+  const { rows } = await pool.query(
+    `SELECT c.message_id, c.kind, c.path, c.start_line, c.end_line, c.content, c.truncated, c.est_tokens
+       FROM vscode_chat.message_context c
+       JOIN vscode_chat.messages m ON m.id = c.message_id
+      WHERE m.session_id = $1
+      ORDER BY c.message_id, c.position`,
+    [sessionId],
+  );
+
+  const byMessage = new Map<string, AttachmentWithContent[]>();
+  for (const r of rows) {
+    const messageId = String(r.message_id);
+    const list = byMessage.get(messageId) ?? [];
+    list.push({
+      kind: r.kind,
+      path: r.path,
+      startLine: r.start_line,
+      endLine: r.end_line,
+      content: r.content,
+      truncated: r.truncated,
+      estTokens: r.est_tokens,
+    });
+    byMessage.set(messageId, list);
+  }
+  return byMessage;
+}
+
+/**
+ * Inserta un mensaje con sus adjuntos y actualiza sessions.updated_at en la misma transacción,
+ * para que nunca quede un mensaje de usuario sin el contexto que se envió con él.
+ * Devuelve el id del mensaje.
+ */
+export async function appendMessage(
+  pool: Pool,
+  sessionId: string,
+  role: Role,
+  content: string,
+  attachments: AttachmentWithContent[] = [],
+): Promise<string> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -84,9 +130,18 @@ export async function appendMessage(pool: Pool, sessionId: string, role: Role, c
        RETURNING id`,
       [sessionId, role, content],
     );
+    const messageId = rows[0].id;
+    for (const [position, a] of attachments.entries()) {
+      await client.query(
+        `INSERT INTO vscode_chat.message_context
+           (message_id, position, kind, path, start_line, end_line, content, truncated, est_tokens)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [messageId, position, a.kind, a.path, a.startLine, a.endLine, a.content, a.truncated, a.estTokens],
+      );
+    }
     await client.query(`UPDATE vscode_chat.sessions SET updated_at = now() WHERE id = $1`, [sessionId]);
     await client.query('COMMIT');
-    return String(rows[0].id);
+    return String(messageId);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;

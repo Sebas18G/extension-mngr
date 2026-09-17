@@ -1,0 +1,5 @@
+{
+  // Ollama local. Para volver a Claude: "https://api.anthropic.com/v1" + "claude-sonnet-5".
+  "llmChat.baseUrl": "http://localhost:11434/v1",
+  "llmChat.model": "llama3.2:3b"
+}

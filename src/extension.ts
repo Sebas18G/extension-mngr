@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
-import { setApiKey, setPostgresUrl } from './config/secrets';
-import { closePool, healthCheck } from './db/pool';
+import { getPostgresUrl, setApiKey, setPostgresUrl } from './config/secrets';
+import { closePool, healthCheck, sanitizeError } from './db/pool';
+import { ensureSchema } from './db/schema';
 import { ChatViewProvider } from './panel/ChatViewProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -46,8 +47,23 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       await setPostgresUrl(context.secrets, value);
       vscode.window.showInformationMessage('LLM Chat: conexión a Postgres guardada.');
+      await initSchema(context);
     }),
   );
+
+  void initSchema(context);
+}
+
+/** Crea el schema si ya hay cadena de conexión configurada. */
+async function initSchema(context: vscode.ExtensionContext): Promise<void> {
+  if (!(await getPostgresUrl(context.secrets))) {
+    return;
+  }
+  try {
+    await ensureSchema(context.extensionUri, context.secrets);
+  } catch (err) {
+    vscode.window.showErrorMessage(`LLM Chat: no se pudo crear el schema vscode_chat: ${sanitizeError(err)}`);
+  }
 }
 
 export function deactivate(): Promise<void> {

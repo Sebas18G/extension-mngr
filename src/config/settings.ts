@@ -6,6 +6,8 @@ export interface LlmSettings {
   maxTokens: number;
   temperature: number;
   systemPrompt: string;
+  /** Límite estimado por envío (system prompt + historial + texto + adjuntos). */
+  maxContextTokens: number;
 }
 
 /** Se lee en cada petición para que los cambios en settings.json apliquen sin reiniciar. */
@@ -17,5 +19,6 @@ export function getSettings(): LlmSettings {
     maxTokens: config.get<number>('maxTokens', 4096),
     temperature: config.get<number>('temperature', 0.7),
     systemPrompt: config.get<string>('systemPrompt', ''),
+    maxContextTokens: config.get<number>('maxContextTokens', 200000),
   };
 }

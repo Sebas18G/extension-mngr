@@ -219,6 +219,101 @@ table.usage th[scope='row'] {
   gap: 6px;
 }
 
+.attach-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.attach-bar button {
+  align-self: auto;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0;
+  max-height: 180px;
+  overflow-y: auto;
+  color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-foreground));
+  background: var(--vscode-editorSuggestWidget-background, var(--vscode-editorWidget-background));
+  border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-widget-border, transparent));
+}
+
+.suggestion {
+  padding: 2px 8px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion[aria-selected='true'] {
+  color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
+  background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
+}
+
+.suggestions[hidden],
+.chips[hidden],
+.bubble-attachments[hidden] {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 2px 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--vscode-badge-foreground);
+  background: var(--vscode-badge-background);
+}
+
+.chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.chip-remove {
+  align-self: auto;
+  padding: 0 6px;
+  border-radius: 10px;
+  color: inherit;
+  background: transparent;
+}
+
+button.chip-remove:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.bubble-attachments {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0 0 4px;
+  font-size: 11px;
+  opacity: 0.85;
+  border-bottom: 1px solid currentColor;
+  white-space: normal;
+}
+
+.bubble-attachments .truncated {
+  font-weight: 600;
+}
+
 textarea {
   resize: vertical;
   font-family: inherit;

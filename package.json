@@ -43,7 +43,37 @@
         "title": "Configurar conexión a Postgres",
         "category": "LLM Chat"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "LLM Chat",
+      "properties": {
+        "llmChat.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "URL base del endpoint compatible con OpenAI (sin /chat/completions)."
+        },
+        "llmChat.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "Modelo que se envía en cada petición."
+        },
+        "llmChat.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "description": "Máximo de tokens de la respuesta (max_tokens)."
+        },
+        "llmChat.temperature": {
+          "type": "number",
+          "default": 0.7,
+          "description": "Temperatura de muestreo."
+        },
+        "llmChat.systemPrompt": {
+          "type": "string",
+          "default": "",
+          "description": "Mensaje de sistema opcional que se antepone a cada conversación."
+        }
+      }
+    }
   },
   "scripts": {
     "compile": "npm run check-types && node esbuild.js",

@@ -8,7 +8,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       ChatViewProvider.viewType,
-      new ChatViewProvider(context.extensionUri),
+      new ChatViewProvider(context.extensionUri, context.secrets),
     ),
   );
 

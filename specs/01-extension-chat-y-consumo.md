@@ -125,7 +125,9 @@ type ToHost =
   | { type: 'send'; text: string }
   | { type: 'newSession' }
   | { type: 'openSession'; sessionId: string }
-  | { type: 'listSessions' };
+  | { type: 'listSessions' }
+  | { type: 'cancel' }   // botón de cancelar el stream (paso 8)
+  | { type: 'retry' };   // botón "Reintentar" del estado degradado (paso 12)
 
 // extensión → webview
 type ToWebview =

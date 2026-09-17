@@ -8,6 +8,25 @@
   "main": "./dist/extension.js",
   "activationEvents": [],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "llmChat",
+          "title": "LLM Chat",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "llmChat": [
+        {
+          "id": "llmChat.chatView",
+          "name": "Chat",
+          "type": "webview",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "llmChat.testConnection",

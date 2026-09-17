@@ -1,0 +1,30 @@
+{
+  "name": "llm-chat",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "llmChat.testConnection",
+        "title": "Probar conexión",
+        "category": "LLM Chat"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "npm run check-types && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.5.0"
+  }
+}

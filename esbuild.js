@@ -11,7 +11,7 @@ async function main() {
     platform: 'node',
     target: 'node20',
     outfile: 'dist/extension.js',
-    external: ['vscode'],
+    external: ['vscode', 'pg'],
     minify: production,
     sourcemap: !production,
     logLevel: 'info',

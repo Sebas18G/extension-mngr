@@ -74,6 +74,12 @@
           "type": "string",
           "default": "",
           "description": "Mensaje de sistema opcional que se antepone a cada conversación."
+        },
+        "llmChat.maxContextTokens": {
+          "type": "number",
+          "default": 200000,
+          "minimum": 0,
+          "description": "Límite estimado de tokens por envío (system prompt + historial + texto + adjuntos), calculado como caracteres / 4. Ajústalo al contexto del modelo usado."
         }
       }
     }
@@ -95,6 +101,7 @@
   },
   "dependencies": {
     "dotenv": "^17.4.2",
+    "ignore": "^7.0.9",
     "pg": "^8.23.0"
   }
 }

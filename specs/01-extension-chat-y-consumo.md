@@ -1,6 +1,6 @@
 # SPEC 01 — Extensión de VS Code con chat LLM, sesiones en Postgres y consumo de tokens
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** —
 > **Fecha:** 2026-09-16
 > **Objetivo:** Construir una extensión instalable de VS Code con un panel lateral de chat contra un endpoint compatible con OpenAI, que persista cada sesión en un schema propio de Postgres y muestre los tokens consumidos por sesión.
